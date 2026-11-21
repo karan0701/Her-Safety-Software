@@ -19,6 +19,7 @@ const LS_VOICE_SOS = 'safeher_voice_sos';
 let voiceRecognition = null;
 let voiceRecognitionRestartTimer = null;
 let voiceSOSLastTriggered = 0;
+let voiceMicStream = null;
 
 const LS_COMMUNITY_REPORTS = 'safeher_community_reports';
 const LS_COMMUNITY_VOTES = 'safeher_community_votes';
@@ -361,6 +362,25 @@ function executeSOS() {
   if (document.getElementById('tog-siren')?.checked) playSiren();
 }
 
+function executeVoiceSOS() {
+  stopVoiceRecognition();
+  if (document.getElementById('tog-siren')?.checked) playSiren();
+
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        gLat = pos.coords.latitude;
+        gLng = pos.coords.longitude;
+        gpsAccuracy = pos.coords.accuracy;
+      },
+      () => {},
+      { enableHighAccuracy:true, maximumAge:5000, timeout:3000 }
+    );
+  }
+
+  openSOSMessage();
+}
+
 function openSOSMessage() {
   const phoneNumbers = [...new Set(CONTACTS.map(c => c.phone.replace(/\D/g, '')).filter(Boolean))];
   if (!phoneNumbers.length) {
@@ -388,6 +408,7 @@ function setVoiceCommandEnabled(enabled) {
 
   if (!enabled) {
     stopVoiceRecognition();
+    stopVoiceMicrophone();
     if (status) status.textContent = 'Say "help me" or "send help"';
     toast('🎙️ Voice SOS turned off', 'info');
     return;
@@ -405,9 +426,32 @@ function setVoiceCommandEnabled(enabled) {
   if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
     if (status) status.textContent = 'Voice SOS requires a secure HTTPS page';
     toast('⚠️ Open the app through HTTPS for Voice SOS', 'warn');
+    return;
   }
 
-  startVoiceRecognition();
+  if (navigator.mediaDevices?.getUserMedia) {
+    navigator.mediaDevices.getUserMedia({ audio:true })
+      .then(stream => {
+        voiceMicStream = stream;
+        if (status) status.textContent = 'Microphone ready — listening';
+        startVoiceRecognition();
+      })
+      .catch(() => {
+        const toggle = document.getElementById('tog-voice-sos');
+        if (toggle) toggle.checked = false;
+        localStorage.setItem(LS_VOICE_SOS, 'false');
+        if (status) status.textContent = 'Microphone permission denied';
+        toast('⚠️ Allow microphone access once to enable Voice SOS', 'warn');
+      });
+  } else {
+    startVoiceRecognition();
+  }
+}
+
+function stopVoiceMicrophone() {
+  if (!voiceMicStream) return;
+  voiceMicStream.getTracks().forEach(track => track.stop());
+  voiceMicStream = null;
 }
 
 function startVoiceRecognition() {
@@ -423,32 +467,41 @@ function startVoiceRecognition() {
   voiceRecognition.interimResults = false;
   voiceRecognition.maxAlternatives = 3;
 
+  voiceRecognition.onstart = () => {
+    const status = document.getElementById('voice-sos-status');
+    if (status) status.textContent = 'Listening for help — say "help me"';
+  };
+
+  voiceRecognition.onsoundstart = () => {
+    const status = document.getElementById('voice-sos-status');
+    if (status) status.textContent = 'Sound detected — listening';
+  };
+
   voiceRecognition.onresult = event => {
     for (let i = event.resultIndex; i < event.results.length; i++) {
       if (!event.results[i].isFinal) continue;
 
       let matched = false;
-      let bestConfidence = 0;
       for (let a = 0; a < event.results[i].length; a++) {
         const transcript = event.results[i][a].transcript
           .toLowerCase()
           .replace(/[^a-z\s]/g, ' ')
           .replace(/\s+/g, ' ')
           .trim();
-        const confidence = Number(event.results[i][a].confidence) || 0;
-        bestConfidence = Math.max(bestConfidence, confidence);
-        if (/^(please\s+)?(help me|send help|emergency help)(\s+please)?$/.test(transcript)) {
+        if (
+          /^(please\s+)?(help me|send help|emergency help|need help|help)(\s+please)?$/.test(transcript) ||
+          /\b(help me|send help|emergency help|need help)\b/.test(transcript)
+        ) {
           matched = true;
         }
       }
 
-      if (matched && bestConfidence >= 0.65) {
+      if (matched) {
         const now = Date.now();
         if (now - voiceSOSLastTriggered < 10000) return;
         voiceSOSLastTriggered = now;
         toast('🎙️ Voice SOS detected!', 'danger');
-        stopVoiceRecognition();
-        executeSOS();
+        executeVoiceSOS();
         return;
       }
     }
@@ -1267,7 +1320,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (localStorage.getItem(LS_VOICE_SOS) === 'true') {
     const status = document.getElementById('voice-sos-status');
     if (status) status.textContent = 'Starting voice listening…';
-    setTimeout(startVoiceRecognition, 500);
+    setTimeout(() => setVoiceCommandEnabled(true), 500);
   }
 
   // PWA manifest
