@@ -364,8 +364,7 @@ function executeSOS() {
 function openSOSMessage() {
   const phoneNumbers = [...new Set(CONTACTS.map(c => c.phone.replace(/\D/g, '')).filter(Boolean))];
   if (!phoneNumbers.length) {
-    toast('⚠️ Add a valid guardian phone number!', 'warn');
-    return;
+    phoneNumbers.push('112');
   }
 
   const now = new Date().toLocaleString('en-IN', { hour12:true });
@@ -1242,6 +1241,9 @@ document.addEventListener('DOMContentLoaded', () => {
   loadCommunityReports().forEach(promoteCommunityReport);
 
   const voiceToggle = document.getElementById('tog-voice-sos');
+  if (localStorage.getItem(LS_VOICE_SOS) === null) {
+    localStorage.setItem(LS_VOICE_SOS, 'true');
+  }
   if (voiceToggle) {
     voiceToggle.checked = localStorage.getItem(LS_VOICE_SOS) === 'true';
   }
@@ -1280,3 +1282,9 @@ document.addEventListener('visibilitychange', () => {
     startVoiceRecognition();
   }
 });
+
+window.addEventListener('pointerdown', () => {
+  if (localStorage.getItem(LS_VOICE_SOS) === 'true' && !voiceRecognition) {
+    startVoiceRecognition();
+  }
+}, { once:false, passive:true });
