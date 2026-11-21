@@ -15,6 +15,10 @@ let reportType = 'danger';
 let editingContactId = null;
 let deferredPrompt = null;
 let sirenOsc = null, sirenCtx = null;
+const LS_VOICE_SOS = 'safeher_voice_sos';
+let voiceRecognition = null;
+let voiceRecognitionRestartTimer = null;
+let voiceSOSLastTriggered = 0;
 
 const LS_COMMUNITY_REPORTS = 'safeher_community_reports';
 const LS_COMMUNITY_VOTES = 'safeher_community_votes';
@@ -374,6 +378,116 @@ function openSOSMessage() {
 
   window.location.href = `sms:${phoneNumbers.join(',')}?body=${encodeURIComponent(message)}`;
   toast('💬 Opening message app with SOS and location…', 'danger');
+}
+
+// ════════════════════════════════════════════
+//  VOICE SOS
+// ════════════════════════════════════════════
+function setVoiceCommandEnabled(enabled) {
+  localStorage.setItem(LS_VOICE_SOS, enabled ? 'true' : 'false');
+  const status = document.getElementById('voice-sos-status');
+
+  if (!enabled) {
+    stopVoiceRecognition();
+    if (status) status.textContent = 'Say "help me" or "send help"';
+    toast('🎙️ Voice SOS turned off', 'info');
+    return;
+  }
+
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) {
+    const toggle = document.getElementById('tog-voice-sos');
+    if (toggle) toggle.checked = false;
+    localStorage.setItem(LS_VOICE_SOS, 'false');
+    if (status) status.textContent = 'Voice commands not supported in this browser';
+    toast('⚠️ Voice recognition is not supported in this browser', 'warn');
+    return;
+  }
+
+  if (navigator.mediaDevices?.getUserMedia) {
+    navigator.mediaDevices.getUserMedia({ audio:true })
+      .then(stream => {
+        stream.getTracks().forEach(track => track.stop());
+        startVoiceRecognition();
+      })
+      .catch(() => {
+        const toggle = document.getElementById('tog-voice-sos');
+        if (toggle) toggle.checked = false;
+        localStorage.setItem(LS_VOICE_SOS, 'false');
+        if (status) status.textContent = 'Microphone permission denied';
+        toast('⚠️ Allow microphone access to use Voice SOS', 'warn');
+      });
+  } else {
+    startVoiceRecognition();
+  }
+}
+
+function startVoiceRecognition() {
+  stopVoiceRecognition();
+  if (localStorage.getItem(LS_VOICE_SOS) !== 'true') return;
+
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) return;
+
+  voiceRecognition = new SpeechRecognition();
+  voiceRecognition.lang = 'en-IN';
+  voiceRecognition.continuous = true;
+  voiceRecognition.interimResults = false;
+  voiceRecognition.maxAlternatives = 3;
+
+  voiceRecognition.onresult = event => {
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+      if (!event.results[i].isFinal) continue;
+      const transcript = event.results[i][0].transcript
+        .toLowerCase()
+        .replace(/[^a-z\s]/g, '')
+        .trim();
+
+      if (/\b(help me|send help)\b/.test(transcript)) {
+        const now = Date.now();
+        if (now - voiceSOSLastTriggered < 10000) return;
+        voiceSOSLastTriggered = now;
+        toast('🎙️ Voice SOS detected!', 'danger');
+        stopVoiceRecognition();
+        executeSOS();
+        return;
+      }
+    }
+  };
+
+  voiceRecognition.onerror = event => {
+    if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+      stopVoiceRecognition();
+      const toggle = document.getElementById('tog-voice-sos');
+      if (toggle) toggle.checked = false;
+      localStorage.setItem(LS_VOICE_SOS, 'false');
+      toast('⚠️ Microphone permission denied', 'warn');
+      return;
+    }
+  };
+
+  voiceRecognition.onend = () => {
+    if (localStorage.getItem(LS_VOICE_SOS) !== 'true') return;
+    clearTimeout(voiceRecognitionRestartTimer);
+    voiceRecognitionRestartTimer = setTimeout(() => {
+      if (localStorage.getItem(LS_VOICE_SOS) === 'true') startVoiceRecognition();
+    }, 600);
+  };
+
+  try {
+    voiceRecognition.start();
+    const status = document.getElementById('voice-sos-status');
+    if (status) status.textContent = 'Listening for "help me" or "send help"';
+  } catch(e) {}
+}
+
+function stopVoiceRecognition() {
+  clearTimeout(voiceRecognitionRestartTimer);
+  if (voiceRecognition) {
+    voiceRecognition.onend = null;
+    try { voiceRecognition.stop(); } catch(e) {}
+  }
+  voiceRecognition = null;
 }
 
 function callPrimary() {
@@ -1129,6 +1243,14 @@ document.addEventListener('DOMContentLoaded', () => {
   startGPS();
   renderProfile();
   loadCommunityReports().forEach(promoteCommunityReport);
+
+  const voiceToggle = document.getElementById('tog-voice-sos');
+  if (voiceToggle) {
+    voiceToggle.checked = localStorage.getItem(LS_VOICE_SOS) === 'true';
+  }
+  if (localStorage.getItem(LS_VOICE_SOS) === 'true') {
+    startVoiceRecognition();
+  }
 
   // PWA manifest
   const manifest={name:"SafeHer – Women's Safety",short_name:"SafeHer",start_url:"./",display:"standalone",background_color:"#0C0C12",theme_color:"#FF3055",orientation:"portrait"};
