@@ -305,6 +305,51 @@ a{text-decoration:none;color:inherit;}
 }
 .agree-btn.voted{border-color:var(--green);background:rgba(0,201,107,.10);color:var(--green);}
 
+#s-responder{padding:0!important;}
+.responder-head{
+  height:72px;padding:18px 16px 12px;display:flex;align-items:center;gap:10px;
+  background:var(--card);border-bottom:1px solid var(--border);
+}
+.responder-head h1{font-family:var(--serif);font-size:23px;margin:0;}
+.responder-head p{font-size:11px;color:var(--sub);margin:2px 0 0;}
+.responder-back{
+  width:36px;height:36px;border:1px solid var(--border);border-radius:11px;
+  background:var(--s2);color:var(--text);font-size:28px;line-height:28px;
+}
+.responder-map-wrap{position:relative;height:310px;}
+#responder-map{height:100%;width:100%;background:var(--s1);}
+.responder-sos{
+  position:absolute;z-index:500;left:16px;right:16px;bottom:14px;
+  height:48px;border:0;border-radius:14px;background:var(--red);color:#fff;
+  font-size:14px;font-weight:800;box-shadow:0 8px 24px rgba(255,48,85,.35);
+}
+.responder-content{padding:12px 16px 24px;}
+.responder-switch{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:12px 13px;margin-bottom:10px;border:1px solid var(--border);
+  border-radius:12px;background:var(--card);
+}
+.responder-switch-title{font-size:12.5px;font-weight:800;}
+.responder-switch-desc{font-size:10.5px;color:var(--sub);margin-top:3px;}
+.nearby-card,.request-card{
+  display:flex;align-items:center;gap:10px;padding:11px;margin-bottom:8px;
+  border:1px solid var(--border);border-radius:12px;background:var(--card);
+}
+.nearby-avatar,.request-avatar{
+  width:40px;height:40px;border-radius:50%;display:grid;place-items:center;
+  background:var(--green-glow);border:1px solid rgba(0,201,107,.25);font-size:19px;
+}
+.nearby-info,.request-info{flex:1;min-width:0;}
+.nearby-name,.request-name{font-size:12.5px;font-weight:800;}
+.nearby-meta,.request-meta{font-size:10.5px;color:var(--sub);margin-top:3px;}
+.request-actions{display:flex;gap:6px;margin-top:8px;}
+.request-actions button{
+  border:0;border-radius:9px;padding:8px 10px;font-size:10.5px;font-weight:800;
+}
+.accept-request{background:var(--green);color:#06130d;}
+.message-request{background:var(--s2);color:var(--text);border:1px solid var(--border)!important;}
+.request-status{font-size:10.5px;color:var(--green);font-weight:800;margin-top:5px;}
+
 /* ════════════════════════════════════════════════
    PROFILE / SETTINGS
 ════════════════════════════════════════════════ */

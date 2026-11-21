@@ -19,6 +19,8 @@ let sirenOsc = null, sirenCtx = null;
 const LS_COMMUNITY_REPORTS = 'safeher_community_reports';
 const LS_COMMUNITY_VOTES = 'safeher_community_votes';
 const COMMUNITY_RED_THRESHOLD = 3;
+const LS_RESPONDER_MODE = 'safeher_responder_mode';
+const LS_RESPONDER_REQUESTS = 'safeher_responder_requests';
 
 function loadCommunityReports() {
   try {
@@ -93,6 +95,7 @@ function goTo(name) {
   if (name === 'contacts') renderContacts();
   if (name === 'alerts') renderAlerts();
   if (name === 'profile') renderProfile();
+  if (name === 'responder') openResponderMode(false);
 }
 
 // ════════════════════════════════════════════
@@ -787,6 +790,182 @@ function voteCommunityReport(reportId) {
   toast(report.votes >= COMMUNITY_RED_THRESHOLD
     ? '🚨 This area is now a community red zone'
     : `✓ Vote added · ${COMMUNITY_RED_THRESHOLD - report.votes} more needed`, 'danger');
+}
+
+// ════════════════════════════════════════════
+//  RESPONDER MODE
+// ════════════════════════════════════════════
+let responderMap = null, responderMapInited = false;
+let responderMarkers = [];
+
+const DUMMY_RESPONDERS = [
+  { id:'r1', name:'Aarav', type:'Bike rider', distance:'0.8 km', latOffset:0.0041, lngOffset:0.0032, emoji:'🛵' },
+  { id:'r2', name:'Meera', type:'Verified volunteer', distance:'1.2 km', latOffset:-0.0035, lngOffset:0.0045, emoji:'👩‍🦽' },
+  { id:'r3', name:'Kabir', type:'Auto rider', distance:'1.6 km', latOffset:0.0062, lngOffset:-0.0042, emoji:'🚕' }
+];
+
+function loadResponderRequests() {
+  try {
+    const data = JSON.parse(localStorage.getItem(LS_RESPONDER_REQUESTS));
+    return Array.isArray(data) ? data : [];
+  } catch(e) { return []; }
+}
+
+function saveResponderRequests(requests) {
+  localStorage.setItem(LS_RESPONDER_REQUESTS, JSON.stringify(requests));
+}
+
+function openResponderMode(goHome = true) {
+  if (goHome) goTo('responder');
+  else document.getElementById('s-responder').classList.add('active');
+
+  initResponderMap();
+  renderNearbyResponders();
+  renderResponderRequests();
+
+  const toggle = document.getElementById('tog-responder');
+  if (toggle) toggle.checked = localStorage.getItem(LS_RESPONDER_MODE) === 'true';
+  setResponderAvailability(toggle?.checked || false);
+}
+
+function initResponderMap() {
+  if (!document.getElementById('responder-map')) return;
+  if (!responderMapInited) {
+    responderMapInited = true;
+    responderMap = L.map('responder-map', { zoomControl:false, attributionControl:false })
+      .setView([gLat, gLng], 15);
+    L.tileLayer(MAP_TILES.light, { subdomains:['0','1','2','3'], maxZoom:21, attribution:'' })
+      .addTo(responderMap);
+  }
+
+  responderMarkers.forEach(marker => responderMap.removeLayer(marker));
+  responderMarkers = [];
+
+  const userIcon = L.divIcon({
+    className:'',
+    html:'<div style="width:20px;height:20px;border-radius:50%;background:#3B82F6;border:3px solid #fff;box-shadow:0 2px 8px rgba(59,130,246,.7)"></div>',
+    iconSize:[20,20], iconAnchor:[10,10]
+  });
+  responderMarkers.push(L.marker([gLat, gLng], {icon:userIcon}).addTo(responderMap)
+    .bindPopup('<div class="pop-title">🔵 Your location</div><div class="pop-info">Needy person</div>'));
+
+  DUMMY_RESPONDERS.forEach(rider => {
+    const riderIcon = L.divIcon({
+      className:'',
+      html:`<div style="width:34px;height:34px;border-radius:50%;display:grid;place-items:center;background:#00C96B;border:3px solid #fff;box-shadow:0 3px 12px rgba(0,201,107,.5);font-size:17px">${rider.emoji}</div>`,
+      iconSize:[34,34], iconAnchor:[17,17]
+    });
+    responderMarkers.push(L.marker([gLat+rider.latOffset, gLng+rider.lngOffset], {icon:riderIcon})
+      .addTo(responderMap)
+      .bindPopup(`<div class="pop-title">${rider.emoji} ${rider.name}</div><div class="pop-info">${rider.type} · ${rider.distance} away</div><span class="pop-chip chip-s">AVAILABLE</span>`));
+  });
+
+  responderMap.setView([gLat, gLng], 15);
+}
+
+function renderNearbyResponders() {
+  const list = document.getElementById('nearby-responder-list');
+  if (!list) return;
+  list.innerHTML = DUMMY_RESPONDERS.map(rider => `
+    <div class="nearby-card">
+      <div class="nearby-avatar">${rider.emoji}</div>
+      <div class="nearby-info">
+        <div class="nearby-name">${rider.name}</div>
+        <div class="nearby-meta">${rider.type} · ${rider.distance} away</div>
+      </div>
+    </div>`).join('');
+}
+
+function setResponderAvailability(available) {
+  localStorage.setItem(LS_RESPONDER_MODE, String(available));
+  document.getElementById('responder-user-view').style.display = available ? 'none' : 'block';
+  document.getElementById('responder-rider-view').style.display = available ? 'block' : 'none';
+  renderResponderRequests();
+}
+
+function sendResponderSOS() {
+  const requests = loadResponderRequests();
+  const existing = requests.find(request => request.status !== 'completed');
+  if (existing) {
+    toast('Nearby help request is already active', 'warn');
+    renderResponderRequests();
+    return;
+  }
+
+  const request = {
+    id: `sos-${Date.now()}`,
+    name: PROFILE.name || 'SafeHer User',
+    lat: gLat,
+    lng: gLng,
+    status: 'waiting',
+    message: '',
+    time: new Date().toLocaleTimeString('en-IN', {hour:'2-digit', minute:'2-digit'})
+  };
+  saveResponderRequests([request, ...requests]);
+  renderResponderRequests();
+  toast('🆘 Nearby responders notified', 'danger');
+}
+
+function renderResponderRequests() {
+  const list = document.getElementById('responder-request-list');
+  if (!list) return;
+  const requests = loadResponderRequests();
+  const active = requests.filter(request => request.status !== 'completed');
+
+  if (!active.length) {
+    list.innerHTML = '<div class="nearby-card"><div class="nearby-info"><div class="nearby-name">No active SOS requests</div><div class="nearby-meta">Nearby dummy requests appear here</div></div></div>';
+  } else {
+    list.innerHTML = active.map(request => `
+      <div class="request-card">
+        <div class="request-avatar">🆘</div>
+        <div class="request-info">
+          <div class="request-name">${escapeAlertText(request.name)}</div>
+          <div class="request-meta">${request.time} · ${Number(request.lat).toFixed(4)}, ${Number(request.lng).toFixed(4)}</div>
+          ${request.status === 'accepted'
+            ? `<div class="request-status">✓ Accepted · I am on the way</div>`
+            : request.status === 'messaged'
+              ? `<div class="request-status">💬 “I am near you. Stay where you are.”</div>`
+              : `<div class="request-actions">
+                  <button class="accept-request" onclick="acceptResponderRequest('${request.id}')">Accept & go</button>
+                  <button class="message-request" onclick="messageResponderRequest('${request.id}')">I'm near</button>
+                </div>`}
+        </div>
+      </div>`).join('');
+  }
+
+  const latest = active[0];
+  const statusCard = document.getElementById('responder-user-status');
+  if (statusCard) {
+    statusCard.style.display = latest ? 'flex' : 'none';
+    if (latest) {
+      const status = latest.status === 'accepted'
+        ? '✓ A responder accepted and is on the way'
+        : latest.status === 'messaged'
+          ? '💬 A responder says: “I am near you. Stay where you are.”'
+          : '🆘 Request sent · waiting for a nearby responder';
+      statusCard.innerHTML =
+        `<div class="nearby-info"><div class="nearby-name">Responder SOS status</div><div class="request-status">${status}</div></div>`;
+    }
+  }
+}
+
+function acceptResponderRequest(requestId) {
+  updateResponderRequest(requestId, 'accepted', 'A responder is on the way');
+}
+
+function messageResponderRequest(requestId) {
+  updateResponderRequest(requestId, 'messaged', 'I am near you. Stay where you are.');
+}
+
+function updateResponderRequest(requestId, status, message) {
+  const requests = loadResponderRequests();
+  const request = requests.find(item => item.id === requestId);
+  if (!request) return;
+  request.status = status;
+  request.message = message;
+  saveResponderRequests(requests);
+  renderResponderRequests();
+  toast(status === 'accepted' ? '🛵 You accepted the SOS request' : '💬 Reassurance sent', 'success');
 }
 
 // ════════════════════════════════════════════

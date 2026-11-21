@@ -98,6 +98,11 @@
       <div class="qt">Area Alerts</div>
       <div class="qs">Community safety news</div>
     </div>
+    <div class="qa" onclick="openResponderMode()">
+      <div class="qi">🛵</div>
+      <div class="qt">Responder Mode</div>
+      <div class="qs">Find nearby riders & help</div>
+    </div>
   </div>
 </div>
 
@@ -162,6 +167,48 @@
     <p>Community safety reports — Greater Noida</p>
   </div>
   <div style="padding:0 16px;" id="alerts-container"></div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     RESPONDER MODE
+══════════════════════════════════════════ -->
+<div id="s-responder" class="screen">
+  <div class="responder-head">
+    <button class="responder-back" onclick="goTo('home')" title="Back">‹</button>
+    <div>
+      <h1>Responder Mode</h1>
+      <p>Nearby safety assistance</p>
+    </div>
+  </div>
+
+  <div class="responder-map-wrap">
+    <div id="responder-map"></div>
+    <button class="responder-sos" onclick="sendResponderSOS()">🆘 Request Nearby Help</button>
+  </div>
+
+  <div class="responder-content">
+    <div class="responder-switch">
+      <div>
+        <div class="responder-switch-title">I am available to respond</div>
+        <div class="responder-switch-desc">Preview and accept dummy SOS requests</div>
+      </div>
+      <label class="tgl">
+        <input type="checkbox" id="tog-responder" onchange="setResponderAvailability(this.checked)">
+        <span class="tgl-sl"></span>
+      </label>
+    </div>
+
+    <div id="responder-user-view">
+      <div id="responder-user-status" class="nearby-card" style="display:none;"></div>
+      <div class="section-label">AVAILABLE NEARBY</div>
+      <div id="nearby-responder-list"></div>
+    </div>
+
+    <div id="responder-rider-view" style="display:none;">
+      <div class="section-label">SOS REQUESTS</div>
+      <div id="responder-request-list"></div>
+    </div>
+  </div>
 </div>
 
 <!-- ══════════════════════════════════════════
