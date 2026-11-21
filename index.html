@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#FF3055">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="SafeHer">
+  <title>SafeHer – Women's Safety</title>
+
+  <!-- Fonts & External Libraries -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700;800&family=Playfair+Display:ital,wght@0,700;1,600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <!-- Separated Stylesheet -->
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div id="app">
+<div class="screens">
+
+<!-- ══════════════════════════════════════════
+     HOME
+══════════════════════════════════════════ -->
+<div id="s-home" class="screen active">
+  <div class="home-hero">
+    <div class="hero-top">
+      <div class="hero-logo">
+        <div class="hero-logo-icon">🌸</div>
+        <div class="hero-logo-text">Safe<b>Her</b></div>
+      </div>
+      <div class="zone-badge neutral" id="zone-pill">
+        <span class="badge-dot"></span>
+        <span id="zone-text">Locating…</span>
+      </div>
+    </div>
+    <h1 class="hero-title">Your safety,<br><i>always first.</i></h1>
+    <p class="hero-sub">One tap to call, locate & alert your family anywhere.</p>
+  </div>
+
+  <div class="sos-area">
+    <div class="sos-outer">
+      <div class="sos-ring"></div>
+      <div class="sos-ring"></div>
+      <div class="sos-ring"></div>
+      <button class="sos-core" id="main-sos-btn" onclick="triggerSOS()">SOS</button>
+    </div>
+    <div class="sos-label">PRESS FOR EMERGENCY</div>
+  </div>
+
+  <div class="stats-strip">
+    <div class="ss-item">
+      <div class="ss-val" id="stat-contacts" style="color:var(--red)">3</div>
+      <div class="ss-key">GUARDIANS</div>
+    </div>
+    <div class="ss-item">
+      <div class="ss-val" id="stat-zone" style="color:var(--sub);font-size:13px">---</div>
+      <div class="ss-key">YOUR ZONE</div>
+    </div>
+    <div class="ss-item">
+      <div class="ss-val" style="color:var(--green)">ON</div>
+      <div class="ss-key">GPS</div>
+    </div>
+  </div>
+
+  <div class="qa-grid">
+    <div class="qa" onclick="goTo('map')">
+      <div class="qi">🗺️</div>
+      <div class="qt">Safety Map</div>
+      <div class="qs">View danger & safe zones</div>
+    </div>
+    <div class="qa" onclick="openSendLocation()">
+      <div class="qi">📍</div>
+      <div class="qt">Send Location</div>
+      <div class="qs">Share live location now</div>
+    </div>
+    <div class="qa" onclick="startFakeCall()">
+      <div class="qi">📞</div>
+      <div class="qt">Fake Call</div>
+      <div class="qs">Escape any situation</div>
+    </div>
+    <div class="qa" onclick="openJourneyModal()">
+      <div class="qi">🚶‍♀️</div>
+      <div class="qt">Safe Journey</div>
+      <div class="qs">Auto-alert if you're late</div>
+    </div>
+    <div class="qa" onclick="callPrimary()">
+      <div class="qi">🆘</div>
+      <div class="qt">Call Guardian</div>
+      <div class="qs">Direct call to primary</div>
+    </div>
+    <div class="qa" onclick="goTo('alerts')">
+      <div class="qi">🔔</div>
+      <div class="qt">Area Alerts</div>
+      <div class="qs">Community safety news</div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     MAP
+══════════════════════════════════════════ -->
+<div id="s-map" class="screen">
+  <div class="map-header">
+    <div class="mh-top">
+      <h2>🗺️ Live Safety Map</h2>
+      <button class="ml-me" onclick="flyToMe()" title="My location">📍</button>
+    </div>
+    <div class="mh-leg">
+      <div class="ml"><div class="ml-dot" style="background:#FF3055;box-shadow:0 0 5px #FF3055;"></div>Danger</div>
+      <div class="ml"><div class="ml-dot" style="background:#00C96B;box-shadow:0 0 5px #00C96B;"></div>Safe</div>
+      <div class="ml"><div class="ml-dot" style="background:#FFB800;"></div>Caution</div>
+      <div class="ml"><div class="ml-dot" style="background:#3B82F6;box-shadow:0 0 5px #3B82F6;"></div>You</div>
+    </div>
+  </div>
+  <div id="map"></div>
+  <div class="map-fabs">
+    <button class="mfab" onclick="flyToMe()">🎯</button>
+    <button class="mfab" onclick="openReportModal()">🚨</button>
+    <button class="mfab" onclick="toggleMapStyle()" id="map-style-btn">🌙</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     CONTACTS
+══════════════════════════════════════════ -->
+<div id="s-contacts" class="screen">
+  <div class="pg-head">
+    <h1>Guardians</h1>
+    <p>Your registered emergency contacts</p>
+  </div>
+
+  <div class="section-label">MY GUARDIANS</div>
+  <div class="contact-list" id="contacts-list"><!-- rendered by JS --></div>
+
+  <div style="padding:0 16px 20px;">
+    <button class="add-contact-btn" onclick="openAddContact()">
+      <span style="font-size:18px;">➕</span>
+      Add New Guardian
+    </button>
+  </div>
+
+  <div class="section-label">EMERGENCY HELPLINES</div>
+  <div class="emg-grid">
+    <a class="emg-card" href="tel:112"><div class="emg-num">112</div><div class="emg-name">National Emergency</div><div class="emg-desc">Police · Fire · Medical</div></a>
+    <a class="emg-card" href="tel:1091"><div class="emg-num">1091</div><div class="emg-name">Women Helpline</div><div class="emg-desc">24×7 support</div></a>
+    <a class="emg-card" href="tel:100"><div class="emg-num">100</div><div class="emg-name">Police</div><div class="emg-desc">Immediate help</div></a>
+    <a class="emg-card" href="tel:181"><div class="emg-num">181</div><div class="emg-name">Nirbhaya</div><div class="emg-desc">Women safety</div></a>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     ALERTS
+══════════════════════════════════════════ -->
+<div id="s-alerts" class="screen">
+  <div class="pg-head">
+    <h1>Area Alerts</h1>
+    <p>Community safety reports — Greater Noida</p>
+  </div>
+  <div style="padding:0 16px;" id="alerts-container"></div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     PROFILE
+══════════════════════════════════════════ -->
+<div id="s-profile" class="screen">
+  <div class="profile-hero">
+    <div class="p-av">🌸</div>
+    <div>
+      <div class="p-name" id="p-name-display">SafeHer User</div>
+      <div class="p-email" id="p-email-display">rahul09876goyal@gmail.com</div>
+      <div class="p-sos-num" id="p-sos-display">Primary SOS: 9817044674</div>
+    </div>
+  </div>
+
+  <div class="section-label">SETTINGS</div>
+  <div style="padding:0 16px;">
+    <div class="srow"><div class="s-icon">🔔</div><div class="s-info"><div class="s-label">Zone Danger Alerts</div><div class="s-desc">Vibrate when entering danger area</div></div><label class="tgl"><input type="checkbox" checked id="tog-zone"><span class="tgl-sl"></span></label></div>
+    <div class="srow"><div class="s-icon">📍</div><div class="s-info"><div class="s-label">Auto-share on SOS</div><div class="s-desc">Send location with every SOS</div></div><label class="tgl"><input type="checkbox" checked id="tog-loc"><span class="tgl-sl"></span></label></div>
+    <div class="srow"><div class="s-icon">🔊</div><div class="s-info"><div class="s-label">Siren on SOS</div><div class="s-desc">Play loud alarm sound</div></div><label class="tgl"><input type="checkbox" checked id="tog-siren"><span class="tgl-sl"></span></label></div>
+    <div class="srow"><div class="s-icon">💬</div><div class="s-info"><div class="s-label">WhatsApp Alerts</div><div class="s-desc">Send via WhatsApp if available</div></div><label class="tgl"><input type="checkbox" checked id="tog-wa"><span class="tgl-sl"></span></label></div>
+  </div>
+
+  <div class="section-label" style="margin-top:8px;">ACCOUNT</div>
+  <div style="padding:0 16px;">
+    <div class="srow" onclick="openEditProfile()"><div class="s-icon">✏️</div><div class="s-info"><div class="s-label">Edit Profile</div><div class="s-desc">Update name & email</div></div><div class="s-arrow">›</div></div>
+    <div class="srow" onclick="sendTestAlert()"><div class="s-icon">🧪</div><div class="s-info"><div class="s-label">Send Test Alert</div><div class="s-desc">Test your SOS system now</div></div><div class="s-arrow">›</div></div>
+    <div class="srow" onclick="installPWA()"><div class="s-icon">📲</div><div class="s-info"><div class="s-label">Install on Phone</div><div class="s-desc">Add to home screen as app</div></div><div class="s-arrow">›</div></div>
+  </div>
+
+  <div style="text-align:center;padding:24px 0 8px;color:var(--dim);font-size:11px;font-weight:600;">
+    SafeHer v2.0 · Greater Noida · Hackathon 2024<br>
+    <span style="color:var(--red);margin-top:3px;display:block;">Made with ❤️ for every woman's safety</span>
+  </div>
+</div>
+
+</div><!-- /screens -->
+
+<!-- BOTTOM NAV -->
+<nav class="bnav">
+  <button class="nb active" id="nb-home" onclick="goTo('home')"><span class="ni">🏠</span>HOME</button>
+  <button class="nb" id="nb-map" onclick="goTo('map')"><span class="ni">🗺️</span>MAP</button>
+  <div class="nb-sos"><button class="sos-mini-btn" onclick="triggerSOS()">SOS</button></div>
+  <button class="nb" id="nb-contacts" onclick="goTo('contacts')"><span class="ni">👥</span>CONTACTS</button>
+  <button class="nb" id="nb-profile" onclick="goTo('profile')"><span class="ni">👤</span>PROFILE</button>
+</nav>
+</div><!-- /app -->
+
+<!-- ══════════════════════════════════════════
+     SOS MODAL
+══════════════════════════════════════════ -->
+<div class="modal-overlay" id="sos-modal">
+  <div class="modal-box centered" style="border:2px solid var(--red);box-shadow:0 0 80px rgba(255,48,85,.2);">
+    <div class="sos-m-icon">🆘</div>
+    <div class="sos-m-title">SOS ACTIVATED</div>
+    <div class="sos-m-sub" id="sos-contacts-text">Calling & alerting your guardians…</div>
+    <div class="sos-m-cd" id="sos-cd">5</div>
+    <div class="sos-loc-box">
+      <span>📍</span>
+      <span id="sos-loc-display">Getting your GPS location…</span>
+    </div>
+    <div class="sos-m-btns">
+      <button class="btn-cancel" onclick="cancelSOS()">Cancel</button>
+      <button class="btn-sendnow" onclick="executeSOS()">Send Now 🆘</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     CONTACT ADD/EDIT MODAL
+══════════════════════════════════════════ -->
+<div class="modal-overlay" id="contact-modal">
+  <div class="modal-box">
+    <div class="modal-handle"></div>
+    <div class="modal-title" id="contact-modal-title">Add Guardian</div>
+    <div class="modal-sub" id="contact-modal-sub">This person will receive your SOS alerts</div>
+
+    <label class="field-label">FULL NAME</label>
+    <input class="field-input" id="c-name" type="text" placeholder="e.g. Papa, Mummy, Bhai">
+
+    <label class="field-label">PHONE NUMBER</label>
+    <input class="field-input" id="c-phone" type="tel" placeholder="e.g. 9817044674" inputmode="tel">
+
+    <label class="field-label">RELATIONSHIP</label>
+    <input class="field-input" id="c-rel" type="text" placeholder="e.g. Father, Mother, Friend">
+
+    <div class="field-row" style="margin-bottom:14px;">
+      <div>
+        <label class="field-label">EMOJI / ICON</label>
+        <input class="field-input" id="c-emoji" type="text" placeholder="👨" style="font-size:22px;text-align:center;margin-bottom:0;">
+      </div>
+      <div>
+        <label class="field-label">PRIMARY SOS?</label>
+        <div style="display:flex;align-items:center;gap:10px;padding-top:6px;">
+          <label class="tgl"><input type="checkbox" id="c-primary"><span class="tgl-sl"></span></label>
+          <span style="font-size:12px;color:var(--sub);">First to call</span>
+        </div>
+      </div>
+    </div>
+
+    <button class="btn-primary" onclick="saveContact()" id="save-contact-btn">Save Guardian</button>
+    <button class="btn-secondary" onclick="closeContactModal()">Cancel</button>
+    <button class="btn-delete" id="delete-contact-btn" onclick="deleteContact()" style="display:none;">Delete Guardian</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     SEND LOCATION MODAL
+══════════════════════════════════════════ -->
+<div class="modal-overlay" id="location-modal">
+  <div class="modal-box">
+    <div class="modal-handle"></div>
+    <div class="modal-title">📍 Send My Location</div>
+    <div class="modal-sub" id="loc-modal-sub">Your live GPS coordinates will be shared</div>
+
+    <div class="loc-method" onclick="sendViaSMS()">
+      <div class="lm-icon">💬</div>
+      <div class="lm-info"><div class="lm-title">SMS — All Guardians</div><div class="lm-desc">Opens SMS with Google Maps link</div></div>
+      <div class="lm-arrow">›</div>
+    </div>
+    <div class="loc-method" onclick="sendViaWhatsApp()">
+      <div class="lm-icon">💚</div>
+      <div class="lm-info"><div class="lm-title">WhatsApp — Primary Guardian</div><div class="lm-desc">Sends via WhatsApp instantly</div></div>
+      <div class="lm-arrow">›</div>
+    </div>
+    <div class="loc-method" onclick="sendViaEmail()">
+      <div class="lm-icon">📧</div>
+      <div class="lm-info"><div class="lm-title">Email — rahul09876goyal@gmail.com</div><div class="lm-desc">Full location + map link</div></div>
+      <div class="lm-arrow">›</div>
+    </div>
+    <div class="loc-method" onclick="copyLocationLink()">
+      <div class="lm-icon">🔗</div>
+      <div class="lm-info"><div class="lm-title">Copy Link</div><div class="lm-desc">Copy Google Maps link to clipboard</div></div>
+      <div class="lm-arrow">›</div>
+    </div>
+
+    <button class="btn-secondary" style="margin-top:6px;" onclick="closeLocModal()">Close</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     JOURNEY MODAL
+══════════════════════════════════════════ -->
+<div class="modal-overlay" id="journey-modal">
+  <div class="modal-box">
+    <div class="modal-handle"></div>
+    <div class="modal-title">🚶‍♀️ Safe Journey</div>
+    <div class="modal-sub">Set a timer — your guardians get an alert if you don't check in on time</div>
+
+    <label class="field-label">GOING TO</label>
+    <input class="field-input" id="j-dest" type="text" placeholder="Home, College, Metro Station…">
+
+    <label class="field-label">ESTIMATED TIME (minutes)</label>
+    <input class="field-input" id="j-mins" type="number" placeholder="30" min="1" max="300" inputmode="numeric">
+
+    <button class="btn-primary" onclick="startJourney()">Start Journey Tracking</button>
+    <button class="btn-secondary" onclick="closeJourneyModal()">Cancel</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     REPORT MODAL
+══════════════════════════════════════════ -->
+<div class="modal-overlay" id="report-modal">
+  <div class="modal-box">
+    <div class="modal-handle"></div>
+    <div class="modal-title">🚨 Report Danger Area</div>
+    <div class="modal-sub">Help other women stay safe by reporting unsafe locations</div>
+
+    <label class="field-label">DESCRIBE THE INCIDENT</label>
+    <input class="field-input" id="rep-desc" type="text" placeholder="e.g. Eve teasing near metro gate">
+
+    <label class="field-label">TYPE</label>
+    <div style="display:flex;gap:8px;margin-bottom:14px;">
+      <button class="rep-type-btn active" id="rt-danger" onclick="selectReportType('danger',this)" style="flex:1;padding:11px;border-radius:11px;border:1px solid rgba(255,48,85,.4);background:var(--red-glow);color:var(--red);font-weight:700;font-size:13px;">🔴 Danger</button>
+      <button class="rep-type-btn" id="rt-caution" onclick="selectReportType('caution',this)" style="flex:1;padding:11px;border-radius:11px;border:1px solid var(--border);background:var(--s2);color:var(--sub);font-weight:700;font-size:13px;">🟡 Caution</button>
+    </div>
+    <button class="btn-primary" onclick="submitReport()">Submit Report</button>
+    <button class="btn-secondary" onclick="closeReportModal()">Cancel</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     EDIT PROFILE MODAL
+══════════════════════════════════════════ -->
+<div class="modal-overlay" id="profile-modal">
+  <div class="modal-box">
+    <div class="modal-handle"></div>
+    <div class="modal-title">Edit Profile</div>
+
+    <label class="field-label">YOUR NAME</label>
+    <input class="field-input" id="p-name-input" type="text" placeholder="Your name">
+
+    <label class="field-label">EMAIL</label>
+    <input class="field-input" id="p-email-input" type="email" placeholder="your@email.com">
+
+    <button class="btn-primary" onclick="saveProfile()">Save Profile</button>
+    <button class="btn-secondary" onclick="closeProfileModal()">Cancel</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     JOURNEY BANNER
+══════════════════════════════════════════ -->
+<div id="journey-banner">
+  <div class="jb-dot"></div>
+  <div class="jb-text" id="jb-text">Journey active…</div>
+  <button class="jb-safe-btn" onclick="arrivedSafe()">✅ Arrived!</button>
+</div>
+
+<!-- FAKE CALL -->
+<div id="fake-call-screen">
+  <div class="fc-caller">
+    <div class="fc-av" id="fc-av">👩</div>
+    <div class="fc-name" id="fc-name">Mummy</div>
+    <div class="fc-status" id="fc-status">Incoming call…</div>
+  </div>
+  <div class="fc-btns">
+    <button class="fc-btn fc-decline" onclick="endFakeCall()">📵</button>
+    <button class="fc-btn fc-accept" onclick="acceptFakeCall()">📞</button>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div id="toast"></div>
+
+<!-- Separated JavaScript -->
+<script src="app.js"></script>
+</body>
+</html>
