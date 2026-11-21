@@ -183,6 +183,11 @@
 
   <div class="responder-map-wrap">
     <div id="responder-map"></div>
+    <div id="responder-search-overlay" class="responder-search-overlay" style="display:none;">
+      <div class="responder-radar"><span></span><span></span><span></span></div>
+      <div class="responder-search-title">Searching nearby responders…</div>
+      <div class="responder-search-sub">Checking real-time availability</div>
+    </div>
     <button class="responder-sos" onclick="sendResponderSOS()">🆘 Request Nearby Help</button>
   </div>
 
@@ -190,7 +195,7 @@
     <div class="responder-switch">
       <div>
         <div class="responder-switch-title">I am available to respond</div>
-        <div class="responder-switch-desc">Preview and accept dummy SOS requests</div>
+        <div class="responder-switch-desc">Preview and accept SOS requests</div>
       </div>
       <label class="tgl">
         <input type="checkbox" id="tog-responder" onchange="setResponderAvailability(this.checked)">

@@ -797,6 +797,9 @@ function voteCommunityReport(reportId) {
 // ════════════════════════════════════════════
 let responderMap = null, responderMapInited = false;
 let responderMarkers = [];
+let responderSearchTimer = null;
+let responderSearchComplete = false;
+let selectedResponderId = null;
 
 const DUMMY_RESPONDERS = [
   { id:'r1', name:'Aarav', type:'Bike rider', distance:'0.8 km', latOffset:0.0041, lngOffset:0.0032, emoji:'🛵' },
@@ -816,16 +819,20 @@ function saveResponderRequests(requests) {
 }
 
 function openResponderMode(goHome = true) {
-  if (goHome) goTo('responder');
-  else document.getElementById('s-responder').classList.add('active');
+  if (goHome) {
+    goTo('responder');
+    return;
+  }
+  document.getElementById('s-responder').classList.add('active');
 
   initResponderMap();
-  renderNearbyResponders();
   renderResponderRequests();
 
   const toggle = document.getElementById('tog-responder');
   if (toggle) toggle.checked = localStorage.getItem(LS_RESPONDER_MODE) === 'true';
   setResponderAvailability(toggle?.checked || false);
+  if (!responderSearchComplete) startResponderSearch();
+  else renderNearbyResponders();
 }
 
 function initResponderMap() {
@@ -834,10 +841,31 @@ function initResponderMap() {
     responderMapInited = true;
     responderMap = L.map('responder-map', { zoomControl:false, attributionControl:false })
       .setView([gLat, gLng], 15);
-    L.tileLayer(MAP_TILES.light, { subdomains:['0','1','2','3'], maxZoom:21, attribution:'' })
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      subdomains:'abc',
+      maxZoom:19,
+      attribution:'&copy; OpenStreetMap contributors'
+    })
       .addTo(responderMap);
   }
 
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        gLat = pos.coords.latitude;
+        gLng = pos.coords.longitude;
+        responderMap.setView([gLat, gLng], 15);
+        redrawResponderMap();
+      },
+      () => redrawResponderMap(),
+      { enableHighAccuracy:true, maximumAge:5000, timeout:7000 }
+    );
+  } else {
+    redrawResponderMap();
+  }
+}
+
+function redrawResponderMap() {
   responderMarkers.forEach(marker => responderMap.removeLayer(marker));
   responderMarkers = [];
 
@@ -849,16 +877,18 @@ function initResponderMap() {
   responderMarkers.push(L.marker([gLat, gLng], {icon:userIcon}).addTo(responderMap)
     .bindPopup('<div class="pop-title">🔵 Your location</div><div class="pop-info">Needy person</div>'));
 
-  DUMMY_RESPONDERS.forEach(rider => {
-    const riderIcon = L.divIcon({
-      className:'',
-      html:`<div style="width:34px;height:34px;border-radius:50%;display:grid;place-items:center;background:#00C96B;border:3px solid #fff;box-shadow:0 3px 12px rgba(0,201,107,.5);font-size:17px">${rider.emoji}</div>`,
-      iconSize:[34,34], iconAnchor:[17,17]
+  if (responderSearchComplete) {
+    DUMMY_RESPONDERS.forEach(rider => {
+      const riderIcon = L.divIcon({
+        className:'',
+        html:`<div style="width:34px;height:34px;border-radius:50%;display:grid;place-items:center;background:#00C96B;border:3px solid #fff;box-shadow:0 3px 12px rgba(0,201,107,.5);font-size:17px">${rider.emoji}</div>`,
+        iconSize:[34,34], iconAnchor:[17,17]
+      });
+      responderMarkers.push(L.marker([gLat+rider.latOffset, gLng+rider.lngOffset], {icon:riderIcon})
+        .addTo(responderMap)
+        .bindPopup(`<div class="pop-title">${rider.emoji} ${rider.name}</div><div class="pop-info">${rider.type} · ${rider.distance} away</div><span class="pop-chip chip-s">AVAILABLE</span>`));
     });
-    responderMarkers.push(L.marker([gLat+rider.latOffset, gLng+rider.lngOffset], {icon:riderIcon})
-      .addTo(responderMap)
-      .bindPopup(`<div class="pop-title">${rider.emoji} ${rider.name}</div><div class="pop-info">${rider.type} · ${rider.distance} away</div><span class="pop-chip chip-s">AVAILABLE</span>`));
-  });
+  }
 
   responderMap.setView([gLat, gLng], 15);
 }
@@ -866,14 +896,49 @@ function initResponderMap() {
 function renderNearbyResponders() {
   const list = document.getElementById('nearby-responder-list');
   if (!list) return;
+  if (!responderSearchComplete) {
+    list.innerHTML = '<div class="nearby-card"><div class="nearby-info"><div class="nearby-name">Searching…</div><div class="nearby-meta">Nearby responders will appear shortly</div></div></div>';
+    return;
+  }
   list.innerHTML = DUMMY_RESPONDERS.map(rider => `
-    <div class="nearby-card">
+    <div class="nearby-card ${selectedResponderId===rider.id?'selected':''}">
       <div class="nearby-avatar">${rider.emoji}</div>
       <div class="nearby-info">
         <div class="nearby-name">${rider.name}</div>
         <div class="nearby-meta">${rider.type} · ${rider.distance} away</div>
       </div>
+      <button class="select-responder ${selectedResponderId===rider.id?'selected-responder':''}" onclick="selectResponder('${rider.id}')">
+        ${selectedResponderId===rider.id?'Selected':'Select'}
+      </button>
     </div>`).join('');
+}
+
+function startResponderSearch() {
+  clearTimeout(responderSearchTimer);
+  responderSearchComplete = false;
+  selectedResponderId = null;
+  const overlay = document.getElementById('responder-search-overlay');
+  if (overlay) overlay.style.display = 'flex';
+  renderNearbyResponders();
+  redrawResponderMap();
+
+  responderSearchTimer = setTimeout(() => {
+    responderSearchComplete = true;
+    if (overlay) overlay.style.display = 'none';
+    renderNearbyResponders();
+    redrawResponderMap();
+  }, 3500);
+}
+
+function selectResponder(responderId) {
+  const rider = DUMMY_RESPONDERS.find(item => item.id === responderId);
+  if (!rider) return;
+  selectedResponderId = responderId;
+  renderNearbyResponders();
+  if (responderMap) {
+    responderMap.setView([gLat+rider.latOffset, gLng+rider.lngOffset], 15);
+  }
+  toast(`✓ ${rider.name} selected`, 'success');
 }
 
 function setResponderAvailability(available) {
@@ -884,6 +949,9 @@ function setResponderAvailability(available) {
 }
 
 function sendResponderSOS() {
+  if (!responderSearchComplete) {
+    startResponderSearch();
+  }
   const requests = loadResponderRequests();
   const existing = requests.find(request => request.status !== 'completed');
   if (existing) {
@@ -892,9 +960,11 @@ function sendResponderSOS() {
     return;
   }
 
+  const selectedRider = DUMMY_RESPONDERS.find(rider => rider.id === selectedResponderId);
   const request = {
     id: `sos-${Date.now()}`,
     name: PROFILE.name || 'SafeHer User',
+    responderName: selectedRider ? selectedRider.name : 'Nearby responder',
     lat: gLat,
     lng: gLng,
     status: 'waiting',
@@ -938,10 +1008,11 @@ function renderResponderRequests() {
   if (statusCard) {
     statusCard.style.display = latest ? 'flex' : 'none';
     if (latest) {
+      const responderName = latest.responderName ? escapeAlertText(latest.responderName) : 'A responder';
       const status = latest.status === 'accepted'
-        ? '✓ A responder accepted and is on the way'
+        ? `✓ ${responderName} accepted and is on the way`
         : latest.status === 'messaged'
-          ? '💬 A responder says: “I am near you. Stay where you are.”'
+          ? `💬 ${responderName}: “I am near you. Stay where you are.”`
           : '🆘 Request sent · waiting for a nearby responder';
       statusCard.innerHTML =
         `<div class="nearby-info"><div class="nearby-name">Responder SOS status</div><div class="request-status">${status}</div></div>`;
