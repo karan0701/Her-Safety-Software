@@ -933,12 +933,33 @@ function startResponderSearch() {
 function selectResponder(responderId) {
   const rider = DUMMY_RESPONDERS.find(item => item.id === responderId);
   if (!rider) return;
+
+  const requests = loadResponderRequests();
+  const existing = requests.find(request => request.status !== 'completed');
+  if (existing) {
+    toast('Nearby help request is already active', 'warn');
+    return;
+  }
+
   selectedResponderId = responderId;
+
+  const request = {
+    id: `sos-${Date.now()}`,
+    name: PROFILE.name || 'SafeHer User',
+    responderName: rider.name,
+    lat: gLat,
+    lng: gLng,
+    status: 'waiting',
+    message: '',
+    time: new Date().toLocaleTimeString('en-IN', {hour:'2-digit', minute:'2-digit'})
+  };
+  saveResponderRequests([request, ...requests]);
+  renderResponderRequests();
   renderNearbyResponders();
   if (responderMap) {
     responderMap.setView([gLat+rider.latOffset, gLng+rider.lngOffset], 15);
   }
-  toast(`✓ ${rider.name} selected`, 'success');
+  toast(`✓ ${rider.name} selected · help request sent`, 'success');
 }
 
 function setResponderAvailability(available) {
@@ -949,31 +970,8 @@ function setResponderAvailability(available) {
 }
 
 function sendResponderSOS() {
-  if (!responderSearchComplete) {
-    startResponderSearch();
-  }
-  const requests = loadResponderRequests();
-  const existing = requests.find(request => request.status !== 'completed');
-  if (existing) {
-    toast('Nearby help request is already active', 'warn');
-    renderResponderRequests();
-    return;
-  }
-
-  const selectedRider = DUMMY_RESPONDERS.find(rider => rider.id === selectedResponderId);
-  const request = {
-    id: `sos-${Date.now()}`,
-    name: PROFILE.name || 'SafeHer User',
-    responderName: selectedRider ? selectedRider.name : 'Nearby responder',
-    lat: gLat,
-    lng: gLng,
-    status: 'waiting',
-    message: '',
-    time: new Date().toLocaleTimeString('en-IN', {hour:'2-digit', minute:'2-digit'})
-  };
-  saveResponderRequests([request, ...requests]);
-  renderResponderRequests();
-  toast('🆘 Nearby responders notified', 'danger');
+  startResponderSearch();
+  toast('Searching nearby responders…', 'info');
 }
 
 function renderResponderRequests() {
