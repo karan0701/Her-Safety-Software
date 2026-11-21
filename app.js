@@ -19,6 +19,9 @@ const LS_VOICE_SOS = 'safeher_voice_sos';
 let voiceRecognition = null;
 let voiceRecognitionRestartTimer = null;
 let voiceSOSLastTriggered = 0;
+let voiceRecognitionRunning = false;
+let voiceRecognitionStarting = false;
+let voiceRecognitionNeedsGesture = false;
 
 const LS_COMMUNITY_REPORTS = 'safeher_community_reports';
 const LS_COMMUNITY_VOTES = 'safeher_community_votes';
@@ -432,15 +435,40 @@ function setVoiceCommandEnabled(enabled) {
     return;
   }
 
+  voiceRecognitionNeedsGesture = false;
+  startVoiceRecognition();
+}
+
+function updateVoiceSOSStatus(message, listening = false) {
+  const status = document.getElementById('voice-sos-status');
+  const homeStatus = document.getElementById('voice-sos-home-status');
+  const startButton = document.getElementById('voice-sos-start');
+  if (status) status.textContent = message;
+  if (homeStatus) homeStatus.textContent = message;
+  if (startButton) startButton.classList.toggle('listening', listening);
+}
+
+function activateVoiceSOS() {
+  localStorage.setItem(LS_VOICE_SOS, 'true');
+  voiceRecognitionNeedsGesture = false;
+  const toggle = document.getElementById('tog-voice-sos');
+  if (toggle) toggle.checked = true;
   startVoiceRecognition();
 }
 
 function startVoiceRecognition() {
-  stopVoiceRecognition();
   if (localStorage.getItem(LS_VOICE_SOS) !== 'true') return;
+  if (voiceRecognitionRunning || voiceRecognitionStarting) return;
+  if (voiceRecognitionNeedsGesture) {
+    updateVoiceSOSStatus('Tap here and allow microphone access');
+    return;
+  }
 
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SpeechRecognition) return;
+  if (!SpeechRecognition) {
+    updateVoiceSOSStatus('Voice recognition is not supported in this browser');
+    return;
+  }
 
   voiceRecognition = new SpeechRecognition();
   voiceRecognition.lang = 'en-IN';
@@ -449,13 +477,13 @@ function startVoiceRecognition() {
   voiceRecognition.maxAlternatives = 3;
 
   voiceRecognition.onstart = () => {
-    const status = document.getElementById('voice-sos-status');
-    if (status) status.textContent = 'Listening for help — say "help me"';
+    voiceRecognitionStarting = false;
+    voiceRecognitionRunning = true;
+    updateVoiceSOSStatus('Listening — say "help me" or "send help"', true);
   };
 
   voiceRecognition.onsoundstart = () => {
-    const status = document.getElementById('voice-sos-status');
-    if (status) status.textContent = 'Sound detected — listening';
+    updateVoiceSOSStatus('Sound detected — listening', true);
   };
 
   voiceRecognition.onresult = event => {
@@ -486,49 +514,46 @@ function startVoiceRecognition() {
   };
 
   voiceRecognition.onerror = event => {
-    const status = document.getElementById('voice-sos-status');
+    voiceRecognitionStarting = false;
+    voiceRecognitionRunning = false;
     if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
-      stopVoiceRecognition();
-      const toggle = document.getElementById('tog-voice-sos');
-      if (toggle) toggle.checked = false;
-      localStorage.setItem(LS_VOICE_SOS, 'false');
-      if (status) status.textContent = 'Microphone permission denied';
-      toast('⚠️ Microphone permission denied', 'warn');
+      voiceRecognitionNeedsGesture = true;
+      updateVoiceSOSStatus('Tap here and allow microphone access');
       return;
     }
     if (event.error === 'audio-capture') {
-      if (status) status.textContent = 'Microphone unavailable';
+      updateVoiceSOSStatus('Microphone unavailable');
     } else if (event.error === 'network') {
-      if (status) status.textContent = 'Voice network unavailable';
+      updateVoiceSOSStatus('Voice network unavailable — retrying');
       clearTimeout(voiceRecognitionRestartTimer);
       voiceRecognitionRestartTimer = setTimeout(() => startVoiceRecognition(), 1800);
     } else if (event.error === 'no-speech') {
-      if (status) status.textContent = 'Listening for "help me" or "send help"';
+      updateVoiceSOSStatus('Listening — say "help me" or "send help"', true);
     }
   };
 
   voiceRecognition.onnomatch = () => {
-    const status = document.getElementById('voice-sos-status');
-    if (status) status.textContent = 'Listening — say "help me" or "send help"';
+    updateVoiceSOSStatus('Listening — say "help me" or "send help"', true);
   };
 
   voiceRecognition.onend = () => {
-    if (localStorage.getItem(LS_VOICE_SOS) !== 'true') return;
+    voiceRecognitionStarting = false;
+    voiceRecognitionRunning = false;
+    if (localStorage.getItem(LS_VOICE_SOS) !== 'true' || voiceRecognitionNeedsGesture) return;
     clearTimeout(voiceRecognitionRestartTimer);
     voiceRecognitionRestartTimer = setTimeout(() => {
       if (localStorage.getItem(LS_VOICE_SOS) === 'true') startVoiceRecognition();
-    }, 250);
+    }, 500);
   };
 
   try {
+    voiceRecognitionStarting = true;
     voiceRecognition.start();
-    const status = document.getElementById('voice-sos-status');
-    if (status) status.textContent = 'Listening for "help me" or "send help"';
-  } catch(e) {
-    clearTimeout(voiceRecognitionRestartTimer);
-    voiceRecognitionRestartTimer = setTimeout(() => {
-      if (localStorage.getItem(LS_VOICE_SOS) === 'true') startVoiceRecognition();
-    }, 1000);
+  } catch(error) {
+    voiceRecognitionStarting = false;
+    voiceRecognitionRunning = false;
+    voiceRecognitionNeedsGesture = true;
+    updateVoiceSOSStatus('Tap here to start voice SOS');
   }
 }
 
@@ -539,6 +564,10 @@ function stopVoiceRecognition() {
     try { voiceRecognition.stop(); } catch(e) {}
   }
   voiceRecognition = null;
+  voiceRecognitionStarting = false;
+  voiceRecognitionRunning = false;
+  voiceRecognitionNeedsGesture = false;
+  updateVoiceSOSStatus('Voice SOS is off');
 }
 
 function callPrimary() {
@@ -1305,7 +1334,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (localStorage.getItem(LS_VOICE_SOS) === 'true') {
     const status = document.getElementById('voice-sos-status');
     if (status) status.textContent = 'Starting voice listening…';
-    setTimeout(() => setVoiceCommandEnabled(true), 500);
+    setTimeout(startVoiceRecognition, 500);
   }
 
   // PWA manifest
@@ -1337,9 +1366,3 @@ document.addEventListener('visibilitychange', () => {
     startVoiceRecognition();
   }
 });
-
-window.addEventListener('pointerdown', () => {
-  if (localStorage.getItem(LS_VOICE_SOS) === 'true' && !voiceRecognition) {
-    startVoiceRecognition();
-  }
-}, { once:false, passive:true });
