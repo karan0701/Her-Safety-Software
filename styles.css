@@ -295,6 +295,15 @@ a{text-decoration:none;color:inherit;}
 .ai-meta{display:flex;align-items:center;gap:8px;margin-top:6px;}
 .ai-time{font-size:10px;color:var(--dim);font-weight:600;}
 .ai-loc{font-size:10px;color:var(--blue);font-weight:600;}
+.community-heading{margin:10px 0 8px;padding:0;}
+.community-alert{border-color:rgba(255,48,85,.22);}
+.ai-promoted{font-size:9px;color:var(--red);font-weight:800;letter-spacing:.5px;}
+.agree-btn{
+  margin-top:9px;padding:7px 10px;border-radius:9px;
+  border:1px solid rgba(255,48,85,.35);background:var(--red-glow);
+  color:var(--red);font-size:11px;font-weight:800;
+}
+.agree-btn.voted{border-color:var(--green);background:rgba(0,201,107,.10);color:var(--green);}
 
 /* ════════════════════════════════════════════════
    PROFILE / SETTINGS

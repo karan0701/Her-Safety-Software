@@ -16,6 +16,32 @@ let editingContactId = null;
 let deferredPrompt = null;
 let sirenOsc = null, sirenCtx = null;
 
+const LS_COMMUNITY_REPORTS = 'safeher_community_reports';
+const LS_COMMUNITY_VOTES = 'safeher_community_votes';
+const COMMUNITY_RED_THRESHOLD = 3;
+
+function loadCommunityReports() {
+  try {
+    const data = JSON.parse(localStorage.getItem(LS_COMMUNITY_REPORTS));
+    return Array.isArray(data) ? data : [];
+  } catch(e) { return []; }
+}
+
+function saveCommunityReports(reports) {
+  localStorage.setItem(LS_COMMUNITY_REPORTS, JSON.stringify(reports));
+}
+
+function loadCommunityVotes() {
+  try {
+    const data = JSON.parse(localStorage.getItem(LS_COMMUNITY_VOTES));
+    return Array.isArray(data) ? data : [];
+  } catch(e) { return []; }
+}
+
+function saveCommunityVotes(votes) {
+  localStorage.setItem(LS_COMMUNITY_VOTES, JSON.stringify(votes));
+}
+
 // ════════════════════════════════════════════
 //  LOCAL STORAGE — CONTACTS
 // ════════════════════════════════════════════
@@ -289,11 +315,7 @@ function navigateTo(lat, lng) {
 }
 function reportFromHere(lat, lng) { flyToMe(); }
 function reportAt(lat, lng) {
-  const icon = makeDot('#FF3055', 14, false);
-  L.marker([lat,lng],{icon}).addTo(map)
-    .bindPopup('<div class="pop-title">🆕 Your Report</div><div class="pop-info">Pending community review</div><span class="pop-chip chip-d">PENDING</span>')
-    .openPopup();
-  toast('🚨 Incident reported! Thank you.', 'danger');
+  openReportModal(lat, lng);
 }
 
 // ════════════════════════════════════════════
@@ -569,9 +591,10 @@ function arrivedSafe() {
 // ════════════════════════════════════════════
 let reportLat = null, reportLng = null;
 
-function openReportModal() {
-  reportLat = gLat; reportLng = gLng;
+function openReportModal(lat = gLat, lng = gLng) {
+  reportLat = lat; reportLng = lng;
   document.getElementById('rep-desc').value = '';
+  document.getElementById('rep-area').value = '';
   document.getElementById('report-modal').classList.add('open');
 }
 function closeReportModal() {
@@ -588,7 +611,24 @@ function selectReportType(type, btn) {
 }
 function submitReport() {
   const desc = document.getElementById('rep-desc').value.trim();
+  const area = document.getElementById('rep-area').value.trim();
   if (!desc) { toast('⚠️ Please describe the incident', 'warn'); return; }
+  if (!area) { toast('⚠️ Please enter the area name', 'warn'); return; }
+
+  const report = {
+    id: `report-${Date.now()}`,
+    type: reportType,
+    title: `${area} – ${reportType === 'danger' ? 'Danger Report' : 'Caution Report'}`,
+    desc,
+    time: 'Just now',
+    area,
+    lat: reportLat,
+    lng: reportLng,
+    votes: 0
+  };
+  const reports = loadCommunityReports();
+  reports.unshift(report);
+  saveCommunityReports(reports);
   closeReportModal();
   if (map && reportLat) {
     const icon = makeDot(reportType==='danger'?'#FF3055':'#FFB800', 14, false);
@@ -643,9 +683,17 @@ const ALERTS_DATA = [
   { type:'danger', title:'Assault attempt – Surajpur Bypass', desc:'Isolated stretch near bypass. Avoid solo travel at night.', time:'5 days ago', area:'Surajpur' },
 ];
 
+function escapeAlertText(value) {
+  return String(value).replace(/[&<>"']/g, char => ({
+    '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#039;'
+  })[char]);
+}
+
 function renderAlerts() {
   const c = document.getElementById('alerts-container');
-  c.innerHTML = ALERTS_DATA.map(a => `
+  const communityReports = loadCommunityReports();
+  const votedIds = loadCommunityVotes();
+  const officialAlerts = ALERTS_DATA.map(a => `
     <div class="alert-item">
       <div class="ai-dot ai-${a.type==='danger'?'d':a.type==='caution'?'w':'s'}"></div>
       <div class="ai-body">
@@ -657,6 +705,88 @@ function renderAlerts() {
         </div>
       </div>
     </div>`).join('');
+
+  const communityAlerts = communityReports.map(a => {
+    const voted = votedIds.includes(a.id);
+    const promoted = a.type === 'danger' && a.votes >= COMMUNITY_RED_THRESHOLD;
+    return `
+      <div class="alert-item community-alert">
+        <div class="ai-dot ai-${promoted ? 'd' : a.type==='danger'?'d':'w'}"></div>
+        <div class="ai-body">
+          <div class="ai-title">${escapeAlertText(a.title)}</div>
+          <div class="ai-desc">${escapeAlertText(a.desc)}</div>
+          <div class="ai-meta">
+            <span class="ai-time">⏱ ${escapeAlertText(a.time)}</span>
+            <span class="ai-loc">📍 ${escapeAlertText(a.area)}</span>
+            ${promoted ? '<span class="ai-promoted">RED ZONE</span>' : ''}
+          </div>
+          ${promoted ? '' : `
+            <button class="agree-btn ${voted ? 'voted' : ''}" onclick="voteCommunityReport('${a.id}')">
+              ${voted ? '✓ Agreed' : 'I agree'} · ${a.votes}
+            </button>`}
+        </div>
+      </div>`;
+  }).join('');
+
+  c.innerHTML = (communityAlerts ? `<div class="section-label community-heading">COMMUNITY UPDATES</div>` : '') +
+    communityAlerts + officialAlerts;
+}
+
+function promoteCommunityReport(report) {
+  if (!report || report.type !== 'danger' || report.votes < COMMUNITY_RED_THRESHOLD) return;
+  if (!Number.isFinite(report.lat) || !Number.isFinite(report.lng)) return;
+
+  const alreadyAdded = DANGER_ZONES.some(zone =>
+    dist(zone.lat, zone.lng, report.lat, report.lng) < 300
+  );
+  if (alreadyAdded) return;
+
+  DANGER_ZONES.push({
+    id: `community-${report.id}`,
+    lat: report.lat,
+    lng: report.lng,
+    r: 300,
+    name: report.area,
+    why: report.desc,
+    risk: 'HIGH'
+  });
+
+  if (mapInited && map) {
+    L.circle([report.lat, report.lng], {
+      radius: 300,
+      color:'#FF3055',
+      fillColor:'#FF3055',
+      fillOpacity:.18,
+      weight:2.5,
+      opacity:.8
+    }).addTo(map);
+    const icon = makeDot('#FF3055', 20, true);
+    L.marker([report.lat, report.lng], {icon}).addTo(map).bindPopup(
+      `<div class="pop-title">⚠️ ${escapeAlertText(report.area)}</div><div class="pop-info">${escapeAlertText(report.desc)}</div><span class="pop-chip chip-d">COMMUNITY RED ZONE</span>`
+    );
+  }
+}
+
+function voteCommunityReport(reportId) {
+  const votedIds = loadCommunityVotes();
+  if (votedIds.includes(reportId)) {
+    toast('You already agreed with this report', 'info');
+    return;
+  }
+
+  const reports = loadCommunityReports();
+  const report = reports.find(item => item.id === reportId);
+  if (!report) return;
+
+  report.votes = (Number(report.votes) || 0) + 1;
+  saveCommunityReports(reports);
+  saveCommunityVotes([...votedIds, reportId]);
+  promoteCommunityReport(report);
+  renderAlerts();
+  checkZone();
+  toast(report.votes >= COMMUNITY_RED_THRESHOLD
+    ? '🚨 This area is now a community red zone'
+    : `✓ Vote added · ${COMMUNITY_RED_THRESHOLD - report.votes} more needed`, 'danger');
 }
 
 // ════════════════════════════════════════════
@@ -750,6 +880,7 @@ function installPWA() {
 document.addEventListener('DOMContentLoaded', () => {
   startGPS();
   renderProfile();
+  loadCommunityReports().forEach(promoteCommunityReport);
 
   // PWA manifest
   const manifest={name:"SafeHer – Women's Safety",short_name:"SafeHer",start_url:"./",display:"standalone",background_color:"#0C0C12",theme_color:"#FF3055",orientation:"portrait"};
