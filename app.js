@@ -431,7 +431,7 @@ function startVoiceRecognition() {
         .replace(/[^a-z\s]/g, '')
         .trim();
 
-      if (/\b(help me|send help)\b/.test(transcript)) {
+      if (/\b(help me|send help|help|sos|emergency help)\b/.test(transcript)) {
         const now = Date.now();
         if (now - voiceSOSLastTriggered < 10000) return;
         voiceSOSLastTriggered = now;
@@ -468,7 +468,7 @@ function startVoiceRecognition() {
     clearTimeout(voiceRecognitionRestartTimer);
     voiceRecognitionRestartTimer = setTimeout(() => {
       if (localStorage.getItem(LS_VOICE_SOS) === 'true') startVoiceRecognition();
-    }, 600);
+    }, 400);
   };
 
   try {
@@ -1247,7 +1247,8 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   if (localStorage.getItem(LS_VOICE_SOS) === 'true') {
     const status = document.getElementById('voice-sos-status');
-    if (status) status.textContent = 'Turn off and on once to restart listening';
+    if (status) status.textContent = 'Starting voice listening…';
+    setTimeout(startVoiceRecognition, 500);
   }
 
   // PWA manifest
@@ -1258,7 +1259,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Service worker for offline
   if('serviceWorker' in navigator){
-    const sw=`const C='sh-v2';self.addEventListener('install',e=>e.waitUntil(caches.open(C).then(c=>c.addAll(['./','/']))));self.addEventListener('fetch',e=>e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request).catch(()=>caches.match('./')))));`;
+    const sw=`const C='sh-v3';self.addEventListener('install',e=>e.waitUntil(caches.open(C).then(c=>c.addAll(['./','/']))));self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(k=>Promise.all(k.filter(n=>n!==C).map(n=>caches.delete(n))))));self.addEventListener('fetch',e=>{if(e.request.mode==='navigate')e.respondWith(fetch(e.request).catch(()=>caches.match('./')));else e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request)));});`;
     const swB=new Blob([sw],{type:'application/javascript'});
     navigator.serviceWorker.register(URL.createObjectURL(swB)).catch(()=>{});
   }
@@ -1271,3 +1272,11 @@ document.addEventListener('touchend', e => {
   if (e.timeStamp - (window.__lastTap||0) < 400) e.preventDefault();
   window.__lastTap = e.timeStamp;
 }, {passive:false});
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' &&
+      localStorage.getItem(LS_VOICE_SOS) === 'true' &&
+      (!voiceRecognition)) {
+    startVoiceRecognition();
+  }
+});
