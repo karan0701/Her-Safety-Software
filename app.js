@@ -403,23 +403,12 @@ function setVoiceCommandEnabled(enabled) {
     toast('⚠️ Voice recognition is not supported in this browser', 'warn');
     return;
   }
-
-  if (navigator.mediaDevices?.getUserMedia) {
-    navigator.mediaDevices.getUserMedia({ audio:true })
-      .then(stream => {
-        stream.getTracks().forEach(track => track.stop());
-        startVoiceRecognition();
-      })
-      .catch(() => {
-        const toggle = document.getElementById('tog-voice-sos');
-        if (toggle) toggle.checked = false;
-        localStorage.setItem(LS_VOICE_SOS, 'false');
-        if (status) status.textContent = 'Microphone permission denied';
-        toast('⚠️ Allow microphone access to use Voice SOS', 'warn');
-      });
-  } else {
-    startVoiceRecognition();
+  if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+    if (status) status.textContent = 'Voice SOS requires a secure HTTPS page';
+    toast('⚠️ Open the app through HTTPS for Voice SOS', 'warn');
   }
+
+  startVoiceRecognition();
 }
 
 function startVoiceRecognition() {
@@ -431,13 +420,12 @@ function startVoiceRecognition() {
 
   voiceRecognition = new SpeechRecognition();
   voiceRecognition.lang = 'en-IN';
-  voiceRecognition.continuous = true;
-  voiceRecognition.interimResults = false;
+  voiceRecognition.continuous = false;
+  voiceRecognition.interimResults = true;
   voiceRecognition.maxAlternatives = 3;
 
   voiceRecognition.onresult = event => {
     for (let i = event.resultIndex; i < event.results.length; i++) {
-      if (!event.results[i].isFinal) continue;
       const transcript = event.results[i][0].transcript
         .toLowerCase()
         .replace(/[^a-z\s]/g, '')
@@ -456,13 +444,22 @@ function startVoiceRecognition() {
   };
 
   voiceRecognition.onerror = event => {
+    const status = document.getElementById('voice-sos-status');
     if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
       stopVoiceRecognition();
       const toggle = document.getElementById('tog-voice-sos');
       if (toggle) toggle.checked = false;
       localStorage.setItem(LS_VOICE_SOS, 'false');
+      if (status) status.textContent = 'Microphone permission denied';
       toast('⚠️ Microphone permission denied', 'warn');
       return;
+    }
+    if (event.error === 'audio-capture') {
+      if (status) status.textContent = 'Microphone unavailable';
+    } else if (event.error === 'network') {
+      if (status) status.textContent = 'Voice network unavailable';
+    } else if (event.error === 'no-speech') {
+      if (status) status.textContent = 'Listening for "help me" or "send help"';
     }
   };
 
@@ -1249,7 +1246,8 @@ document.addEventListener('DOMContentLoaded', () => {
     voiceToggle.checked = localStorage.getItem(LS_VOICE_SOS) === 'true';
   }
   if (localStorage.getItem(LS_VOICE_SOS) === 'true') {
-    startVoiceRecognition();
+    const status = document.getElementById('voice-sos-status');
+    if (status) status.textContent = 'Turn off and on once to restart listening';
   }
 
   // PWA manifest
