@@ -334,26 +334,32 @@ function executeSOS() {
   const primary = CONTACTS.find(c=>c.primary) || CONTACTS[0];
   if (!primary) { toast('⚠️ Add a guardian first!', 'warn'); return; }
 
-  const locLink  = googleMapsLink();
-  const locStr   = locationString();
-  const smsBody  = `🆘 SOS EMERGENCY! I need immediate help!\n📍 My location: ${locLink}\nCoords: ${locStr}\n— Sent via SafeHer App`;
-  const waBody   = `🆘 *SOS EMERGENCY!* I need immediate help!\n📍 Location: ${locLink}\n— SafeHer App`;
+  const locLink = googleMapsLink();
+  const locStr  = locationString();
+  const now     = new Date().toLocaleString('en-IN', { hour12:true });
+
+  // Message sent via SMS — concise & clear
+  const smsBody = `🆘 SOS! I need IMMEDIATE help!\n📍 Location: ${locLink}\nCoords: ${locStr}\nTime: ${now}\n— SafeHer App`;
+  const waBody  = `🆘 *SOS EMERGENCY!*\nI need immediate help right now!\n📍 *Location:* ${locLink}\n🕐 ${now}\n_(Sent automatically via SafeHer App)_`;
 
   if (document.getElementById('tog-siren')?.checked) playSiren();
 
-  setTimeout(() => { window.location.href = `tel:${primary.phone}`; }, 100);
+  // 1️⃣ Send SMS to ALL guardians immediately (opens SMS app pre-filled — no extra permission needed)
+  const allNums    = CONTACTS.map(c => c.phone).join(',');
+  const encodedSMS = encodeURIComponent(smsBody);
+  window.location.href = `sms:${allNums}?body=${encodedSMS}`;
 
+  // 2️⃣ Call primary guardian after a short delay (gives SMS app a moment to open)
   setTimeout(() => {
-    const allNums = CONTACTS.map(c=>c.phone).join(',');
-    const encodedBody = encodeURIComponent(smsBody);
-    window.location.href = `sms:${allNums}?body=${encodedBody}`;
-  }, 2000);
+    window.location.href = `tel:${primary.phone}`;
+  }, 1500);
 
+  // 3️⃣ WhatsApp message to primary (optional, based on setting)
   if (document.getElementById('tog-wa')?.checked) {
     setTimeout(() => {
-      const waNum = primary.phone.replace(/\D/g,'');
+      const waNum = primary.phone.replace(/\D/g, '');
       window.open(`https://wa.me/91${waNum}?text=${encodeURIComponent(waBody)}`, '_blank');
-    }, 4000);
+    }, 3000);
   }
 
   toast(`🆘 SOS sent to ${CONTACTS.length} guardian(s)!`, 'danger');
