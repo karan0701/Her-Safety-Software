@@ -4,12 +4,12 @@
 //  CONSTANTS & STATE
 // ════════════════════════════════════════════
 const APP_EMAIL = 'rahul09876goyal@gmail.com';
+
 let gLat = 28.4744, gLng = 77.5040; // Default: Greater Noida
 let gpsAccuracy = null;
 let map = null, mapInited = false;
 let userMarker = null;
 let darkMapStyle = true;
-let sosTimer = null, sosCount = 5;
 let journeyTimer = null, journeyDest = '', journeyMins = 0;
 let reportType = 'danger';
 let editingContactId = null;
@@ -305,64 +305,50 @@ function updateSOSLocDisplay() {
 }
 
 function triggerSOS() {
-  const primary = CONTACTS.find(c=>c.primary) || CONTACTS[0];
-  const allNames = CONTACTS.map(c=>c.name).join(', ');
-  document.getElementById('sos-contacts-text').textContent = `Alerting: ${allNames}`;
-  updateSOSLocDisplay();
-
-  sosCount = 5;
-  document.getElementById('sos-cd').textContent = 5;
-  document.getElementById('sos-modal').classList.add('open');
-
-  sosTimer = setInterval(() => {
-    sosCount--;
-    document.getElementById('sos-cd').textContent = sosCount;
-    if (sosCount <= 0) { clearInterval(sosTimer); executeSOS(); }
-  }, 1000);
-}
-
-function cancelSOS() {
-  clearInterval(sosTimer);
-  document.getElementById('sos-modal').classList.remove('open');
-  toast('✅ SOS cancelled — you are safe', 'success');
+  executeSOS();
 }
 
 function executeSOS() {
-  clearInterval(sosTimer);
-  document.getElementById('sos-modal').classList.remove('open');
-
-  const primary = CONTACTS.find(c=>c.primary) || CONTACTS[0];
-  if (!primary) { toast('⚠️ Add a guardian first!', 'warn'); return; }
-
-  const locLink = googleMapsLink();
-  const locStr  = locationString();
-  const now     = new Date().toLocaleString('en-IN', { hour12:true });
-
-  // Message sent via SMS — concise & clear
-  const smsBody = `🆘 SOS! I need IMMEDIATE help!\n📍 Location: ${locLink}\nCoords: ${locStr}\nTime: ${now}\n— SafeHer App`;
-  const waBody  = `🆘 *SOS EMERGENCY!*\nI need immediate help right now!\n📍 *Location:* ${locLink}\n🕐 ${now}\n_(Sent automatically via SafeHer App)_`;
-
-  if (document.getElementById('tog-siren')?.checked) playSiren();
-
-  // 1️⃣ Send SMS to ALL guardians immediately (opens SMS app pre-filled — no extra permission needed)
-  const allNums    = CONTACTS.map(c => c.phone).join(',');
-  const encodedSMS = encodeURIComponent(smsBody);
-  window.location.href = `sms:${allNums}?body=${encodedSMS}`;
-
-  // 2️⃣ Call primary guardian after a short delay (gives SMS app a moment to open)
-  setTimeout(() => {
-    window.location.href = `tel:${primary.phone}`;
-  }, 1500);
-
-  // 3️⃣ WhatsApp message to primary (optional, based on setting)
-  if (document.getElementById('tog-wa')?.checked) {
-    setTimeout(() => {
-      const waNum = primary.phone.replace(/\D/g, '');
-      window.open(`https://wa.me/91${waNum}?text=${encodeURIComponent(waBody)}`, '_blank');
-    }, 3000);
+  if (!CONTACTS.length) {
+    toast('⚠️ Add a guardian first!', 'warn');
+    return;
   }
 
-  toast(`🆘 SOS sent to ${CONTACTS.length} guardian(s)!`, 'danger');
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        gLat = pos.coords.latitude;
+        gLng = pos.coords.longitude;
+        gpsAccuracy = pos.coords.accuracy;
+        openSOSMessage();
+      },
+      openSOSMessage,
+      { enableHighAccuracy:true, maximumAge:2000, timeout:3000 }
+    );
+  } else {
+    openSOSMessage();
+  }
+
+  if (document.getElementById('tog-siren')?.checked) playSiren();
+}
+
+function openSOSMessage() {
+  const phoneNumbers = [...new Set(CONTACTS.map(c => c.phone.replace(/\D/g, '')).filter(Boolean))];
+  if (!phoneNumbers.length) {
+    toast('⚠️ Add a valid guardian phone number!', 'warn');
+    return;
+  }
+
+  const now = new Date().toLocaleString('en-IN', { hour12:true });
+  const message =
+    `🆘 SOS! I need IMMEDIATE help!\n` +
+    `📍 Live location: ${googleMapsLink()}\n` +
+    `Coordinates: ${locationString()}\n` +
+    `Time: ${now}\n` +
+    `— SafeHer App`;
+
+  window.location.href = `sms:${phoneNumbers.join(',')}?body=${encodeURIComponent(message)}`;
+  toast('💬 Opening message app with SOS and location…', 'danger');
 }
 
 function callPrimary() {
@@ -705,7 +691,7 @@ function sendTestAlert() {
   if (!primary) { toast('⚠️ Add a guardian first', 'warn'); return; }
   const msg = encodeURIComponent(`🧪 SafeHer TEST ALERT\n📍 My location: ${googleMapsLink()}\n\nThis is a test — your SafeHer app is working correctly! 🌸`);
   window.location.href = `sms:${primary.phone}?body=${msg}`;
-  toast('🧪 Test alert sent to '+primary.name, 'success');
+  toast('🧪 Opening SMS test alert…', 'info');
 }
 
 // ════════════════════════════════════════════
