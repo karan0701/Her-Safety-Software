@@ -19,7 +19,6 @@ const LS_VOICE_SOS = 'safeher_voice_sos';
 let voiceRecognition = null;
 let voiceRecognitionRestartTimer = null;
 let voiceSOSLastTriggered = 0;
-let voiceMicStream = null;
 
 const LS_COMMUNITY_REPORTS = 'safeher_community_reports';
 const LS_COMMUNITY_VOTES = 'safeher_community_votes';
@@ -382,7 +381,12 @@ function executeVoiceSOS() {
 }
 
 function openSOSMessage() {
-  const phoneNumbers = [...new Set(CONTACTS.map(c => c.phone.replace(/\D/g, '')).filter(Boolean))];
+  const phoneNumbers = [...new Set(CONTACTS.map(c => c.phone.replace(/\D/g, '')).map(number => {
+    if (/^112$/.test(number)) return '112';
+    if (/^\d{10}$/.test(number)) return `91${number}`;
+    if (/^91\d{10}$/.test(number)) return number;
+    return number;
+  }).filter(Boolean))];
   if (!phoneNumbers.length) {
     phoneNumbers.push('112');
   }
@@ -408,7 +412,6 @@ function setVoiceCommandEnabled(enabled) {
 
   if (!enabled) {
     stopVoiceRecognition();
-    stopVoiceMicrophone();
     if (status) status.textContent = 'Say "help me" or "send help"';
     toast('🎙️ Voice SOS turned off', 'info');
     return;
@@ -429,29 +432,7 @@ function setVoiceCommandEnabled(enabled) {
     return;
   }
 
-  if (navigator.mediaDevices?.getUserMedia) {
-    navigator.mediaDevices.getUserMedia({ audio:true })
-      .then(stream => {
-        voiceMicStream = stream;
-        if (status) status.textContent = 'Microphone ready — listening';
-        startVoiceRecognition();
-      })
-      .catch(() => {
-        const toggle = document.getElementById('tog-voice-sos');
-        if (toggle) toggle.checked = false;
-        localStorage.setItem(LS_VOICE_SOS, 'false');
-        if (status) status.textContent = 'Microphone permission denied';
-        toast('⚠️ Allow microphone access once to enable Voice SOS', 'warn');
-      });
-  } else {
-    startVoiceRecognition();
-  }
-}
-
-function stopVoiceMicrophone() {
-  if (!voiceMicStream) return;
-  voiceMicStream.getTracks().forEach(track => track.stop());
-  voiceMicStream = null;
+  startVoiceRecognition();
 }
 
 function startVoiceRecognition() {
@@ -463,8 +444,8 @@ function startVoiceRecognition() {
 
   voiceRecognition = new SpeechRecognition();
   voiceRecognition.lang = 'en-IN';
-  voiceRecognition.continuous = true;
-  voiceRecognition.interimResults = false;
+  voiceRecognition.continuous = false;
+  voiceRecognition.interimResults = true;
   voiceRecognition.maxAlternatives = 3;
 
   voiceRecognition.onstart = () => {
@@ -479,8 +460,6 @@ function startVoiceRecognition() {
 
   voiceRecognition.onresult = event => {
     for (let i = event.resultIndex; i < event.results.length; i++) {
-      if (!event.results[i].isFinal) continue;
-
       let matched = false;
       for (let a = 0; a < event.results[i].length; a++) {
         const transcript = event.results[i][a].transcript
@@ -489,8 +468,7 @@ function startVoiceRecognition() {
           .replace(/\s+/g, ' ')
           .trim();
         if (
-          /^(please\s+)?(help me|send help|emergency help|need help|help)(\s+please)?$/.test(transcript) ||
-          /\b(help me|send help|emergency help|need help)\b/.test(transcript)
+          /\b(help me|help|heal me|half me|hell me|send help|send health|emergency help|need help|please help)\b/.test(transcript)
         ) {
           matched = true;
         }
@@ -522,9 +500,16 @@ function startVoiceRecognition() {
       if (status) status.textContent = 'Microphone unavailable';
     } else if (event.error === 'network') {
       if (status) status.textContent = 'Voice network unavailable';
+      clearTimeout(voiceRecognitionRestartTimer);
+      voiceRecognitionRestartTimer = setTimeout(() => startVoiceRecognition(), 1800);
     } else if (event.error === 'no-speech') {
       if (status) status.textContent = 'Listening for "help me" or "send help"';
     }
+  };
+
+  voiceRecognition.onnomatch = () => {
+    const status = document.getElementById('voice-sos-status');
+    if (status) status.textContent = 'Listening — say "help me" or "send help"';
   };
 
   voiceRecognition.onend = () => {
@@ -532,7 +517,7 @@ function startVoiceRecognition() {
     clearTimeout(voiceRecognitionRestartTimer);
     voiceRecognitionRestartTimer = setTimeout(() => {
       if (localStorage.getItem(LS_VOICE_SOS) === 'true') startVoiceRecognition();
-    }, 400);
+    }, 250);
   };
 
   try {
