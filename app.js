@@ -419,18 +419,30 @@ function startVoiceRecognition() {
 
   voiceRecognition = new SpeechRecognition();
   voiceRecognition.lang = 'en-IN';
-  voiceRecognition.continuous = false;
-  voiceRecognition.interimResults = true;
+  voiceRecognition.continuous = true;
+  voiceRecognition.interimResults = false;
   voiceRecognition.maxAlternatives = 3;
 
   voiceRecognition.onresult = event => {
     for (let i = event.resultIndex; i < event.results.length; i++) {
-      const transcript = event.results[i][0].transcript
-        .toLowerCase()
-        .replace(/[^a-z\s]/g, '')
-        .trim();
+      if (!event.results[i].isFinal) continue;
 
-      if (/\b(help me|send help|help|sos|emergency help)\b/.test(transcript)) {
+      let matched = false;
+      let bestConfidence = 0;
+      for (let a = 0; a < event.results[i].length; a++) {
+        const transcript = event.results[i][a].transcript
+          .toLowerCase()
+          .replace(/[^a-z\s]/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+        const confidence = Number(event.results[i][a].confidence) || 0;
+        bestConfidence = Math.max(bestConfidence, confidence);
+        if (/^(please\s+)?(help me|send help|emergency help)(\s+please)?$/.test(transcript)) {
+          matched = true;
+        }
+      }
+
+      if (matched && bestConfidence >= 0.65) {
         const now = Date.now();
         if (now - voiceSOSLastTriggered < 10000) return;
         voiceSOSLastTriggered = now;
@@ -474,7 +486,12 @@ function startVoiceRecognition() {
     voiceRecognition.start();
     const status = document.getElementById('voice-sos-status');
     if (status) status.textContent = 'Listening for "help me" or "send help"';
-  } catch(e) {}
+  } catch(e) {
+    clearTimeout(voiceRecognitionRestartTimer);
+    voiceRecognitionRestartTimer = setTimeout(() => {
+      if (localStorage.getItem(LS_VOICE_SOS) === 'true') startVoiceRecognition();
+    }, 1000);
+  }
 }
 
 function stopVoiceRecognition() {
